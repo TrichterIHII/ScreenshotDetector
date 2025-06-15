@@ -474,7 +474,7 @@
                 updateDisplay();
                 updateStats();
                 saveScreenshotsToStorage(); // Speichern
-                addLog(`📸 Screenshot empfangen: ${screenshot.name} (${formatBytes(file.size)})`);
+                addLog(`Screenshot empfangen: ${screenshot.name} (${formatBytes(file.size)})`);
             };
             reader.readAsDataURL(file);
         }
