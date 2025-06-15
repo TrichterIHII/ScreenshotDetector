@@ -258,6 +258,33 @@
             background: #2f855a;
         }
 
+        .storage-info {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 10px;
+            font-size: 0.9em;
+        }
+
+        .export-btn {
+            background: #3182ce;
+            color: white;
+        }
+
+        .export-btn:hover {
+            background: #2c5aa0;
+        }
+
+        .import-btn {
+            background: #805ad5;
+            color: white;
+        }
+
+        .import-btn:hover {
+            background: #6b46c1;
+        }
+
         @media (max-width: 768px) {
             .screenshots-grid {
                 grid-template-columns: 1fr;
@@ -274,6 +301,10 @@
         <div class="header">
             <h1>📸 Screenshot Receiver</h1>
             <p>Empfange und verwalte Screenshots von Java-Anwendungen</p>
+            <div class="storage-info">
+                💾 Screenshots werden dauerhaft im Browser gespeichert
+                <br>Speicherplatz verwendet: <span id="storageUsed">0 MB</span>
+            </div>
         </div>
 
         <div class="status">
@@ -309,6 +340,12 @@
             <button class="control-btn download-btn" onclick="downloadAllScreenshots()">
                 📥 Alle herunterladen
             </button>
+            <button class="control-btn export-btn" onclick="exportScreenshots()">
+                📤 Export
+            </button>
+            <button class="control-btn import-btn" onclick="importScreenshots()">
+                📥 Import
+            </button>
         </div>
 
         <div class="screenshots-grid" id="screenshotsGrid"></div>
@@ -327,12 +364,65 @@
         </div>
     </div>
 
+    <!-- Hidden file input for import -->
+    <input type="file" id="importInput" accept=".json" style="display: none;">
+
     <script>
         let screenshots = [];
         let totalSize = 0;
+        const STORAGE_KEY = 'screenshotReceiver_screenshots';
+
+        // Beim Laden der Seite gespeicherte Screenshots laden
+        window.addEventListener('load', () => {
+            loadScreenshotsFromStorage();
+            updateStorageInfo();
+        });
 
         // Upload URL anzeigen
         document.getElementById('uploadUrl').textContent = window.location.origin + window.location.pathname + 'upload';
+
+        // Screenshots aus LocalStorage laden
+        function loadScreenshotsFromStorage() {
+            try {
+                const stored = window.localStorage.getItem(STORAGE_KEY);
+                if (stored) {
+                    screenshots = JSON.parse(stored);
+                    // Gesamtgröße berechnen
+                    totalSize = screenshots.reduce((sum, screenshot) => sum + screenshot.size, 0);
+                    updateDisplay();
+                    updateStats();
+                    addLog(`📂 ${screenshots.length} gespeicherte Screenshots geladen`);
+                }
+            } catch (error) {
+                addLog('⚠️ Fehler beim Laden der gespeicherten Screenshots: ' + error.message);
+                screenshots = [];
+                totalSize = 0;
+            }
+        }
+
+        // Screenshots in LocalStorage speichern
+        function saveScreenshotsToStorage() {
+            try {
+                window.localStorage.setItem(STORAGE_KEY, JSON.stringify(screenshots));
+                updateStorageInfo();
+                addLog('💾 Screenshots gespeichert');
+            } catch (error) {
+                addLog('⚠️ Fehler beim Speichern: ' + error.message);
+                if (error.name === 'QuotaExceededError') {
+                    alert('Speicher voll! Bitte löschen Sie einige Screenshots.');
+                }
+            }
+        }
+
+        // Speicherplatz-Info aktualisieren
+        function updateStorageInfo() {
+            try {
+                const used = new Blob([window.localStorage.getItem(STORAGE_KEY) || '']).size;
+                document.getElementById('storageUsed').textContent = formatBytes(used);
+            } catch (error) {
+                document.getElementById('storageUsed').textContent = 'Unbekannt';
+            }
+        }
 
         // Drag & Drop für Upload-Bereich
         const uploadArea = document.getElementById('uploadArea');
@@ -383,6 +473,7 @@
                 
                 updateDisplay();
                 updateStats();
+                saveScreenshotsToStorage(); // Speichern
                 addLog(`📸 Screenshot empfangen: ${screenshot.name} (${formatBytes(file.size)})`);
             };
             reader.readAsDataURL(file);
@@ -416,6 +507,8 @@
             if (screenshots.length > 0) {
                 const lastTime = new Date(screenshots[0].timestamp).toLocaleTimeString();
                 document.getElementById('lastUpload').textContent = lastTime;
+            } else {
+                document.getElementById('lastUpload').textContent = '-';
             }
         }
 
@@ -428,6 +521,7 @@
                 screenshots.splice(index, 1);
                 updateDisplay();
                 updateStats();
+                saveScreenshotsToStorage(); // Speichern
                 addLog(`🗑️ Screenshot gelöscht: ${deletedName}`);
             }
         }
@@ -436,11 +530,12 @@
         function clearAllScreenshots() {
             if (screenshots.length === 0) return;
             
-            if (confirm(`Wirklich alle ${screenshots.length} Screenshots löschen?`)) {
+            if (confirm(`Wirklich alle ${screenshots.length} Screenshots dauerhaft löschen?`)) {
                 screenshots = [];
                 totalSize = 0;
                 updateDisplay();
                 updateStats();
+                saveScreenshotsToStorage(); // Speichern
                 addLog('🗑️ Alle Screenshots gelöscht');
             }
         }
@@ -463,6 +558,75 @@
             
             addLog(`📥 ${screenshots.length} Screenshots werden heruntergeladen...`);
         }
+
+        // Screenshots exportieren
+        function exportScreenshots() {
+            if (screenshots.length === 0) {
+                alert('Keine Screenshots zum Exportieren vorhanden');
+                return;
+            }
+
+            const exportData = {
+                version: '1.0',
+                exportDate: new Date().toISOString(),
+                screenshots: screenshots
+            };
+
+            const dataStr = JSON.stringify(exportData, null, 2);
+            const dataBlob = new Blob([dataStr], {type: 'application/json'});
+            
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(dataBlob);
+            link.download = `screenshots_export_${new Date().toISOString().slice(0,10)}.json`;
+            link.click();
+            
+            addLog(`📤 ${screenshots.length} Screenshots exportiert`);
+        }
+
+        // Screenshots importieren
+        function importScreenshots() {
+            document.getElementById('importInput').click();
+        }
+
+        // Import-Input Handler
+        document.getElementById('importInput').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const importData = JSON.parse(e.target.result);
+                    
+                    if (!importData.screenshots || !Array.isArray(importData.screenshots)) {
+                        throw new Error('Ungültiges Export-Format');
+                    }
+
+                    const importCount = importData.screenshots.length;
+                    if (confirm(`${importCount} Screenshots importieren? (Bestehende bleiben erhalten)`)) {
+                        // Neue IDs vergeben um Konflikte zu vermeiden
+                        importData.screenshots.forEach(screenshot => {
+                            screenshot.id = Date.now() + Math.random();
+                        });
+                        
+                        screenshots = [...importData.screenshots, ...screenshots];
+                        totalSize = screenshots.reduce((sum, screenshot) => sum + screenshot.size, 0);
+                        
+                        updateDisplay();
+                        updateStats();
+                        saveScreenshotsToStorage();
+                        addLog(`📥 ${importCount} Screenshots importiert`);
+                    }
+                } catch (error) {
+                    alert('Fehler beim Importieren: ' + error.message);
+                    addLog('⚠️ Import-Fehler: ' + error.message);
+                }
+            };
+            reader.readAsText(file);
+            
+            // Input zurücksetzen
+            e.target.value = '';
+        });
 
         // Modal öffnen
         function openModal(imageSrc) {
@@ -506,37 +670,6 @@
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
 
-        // Simuliere eingehende Screenshots für Demo
-        function simulateIncomingScreenshot() {
-            // Erstelle ein Test-Canvas
-            const canvas = document.createElement('canvas');
-            canvas.width = 800;
-            canvas.height = 600;
-            const ctx = canvas.getContext('2d');
-            
-            // Zufälliger Hintergrund
-            const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#feca57'];
-            ctx.fillStyle = colors[Math.floor(Math.random() * colors.length)];
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
-            // Text hinzufügen
-            ctx.fillStyle = 'white';
-            ctx.font = '48px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('Demo Screenshot', canvas.width/2, canvas.height/2);
-            ctx.font = '24px Arial';
-            ctx.fillText(new Date().toLocaleString(), canvas.width/2, canvas.height/2 + 50);
-            
-            // Als Blob konvertieren und hinzufügen
-            canvas.toBlob(blob => {
-                addScreenshot(blob, new Date().toLocaleString());
-            }, 'image/jpeg', 0.8);
-        }
-
-        // Demo-Modus (alle 15 Sekunden ein Test-Screenshot)
-        // Uncomment für Demo:
-        // setInterval(simulateIncomingScreenshot, 15000);
-
         // Tastenkürzel
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
@@ -547,12 +680,19 @@
             } else if (e.ctrlKey && e.key === 'Delete') {
                 e.preventDefault();
                 clearAllScreenshots();
+            } else if (e.ctrlKey && e.key === 'e') {
+                e.preventDefault();
+                exportScreenshots();
+            } else if (e.ctrlKey && e.key === 'i') {
+                e.preventDefault();
+                importScreenshots();
             }
         });
 
         // Initial log
         addLog('✅ Screenshot Receiver bereit');
         addLog('🔗 Upload-URL: ' + window.location.origin + window.location.pathname + 'upload');
+        addLog('💾 Automatische Speicherung aktiviert');
     </script>
 </body>
 </html>
