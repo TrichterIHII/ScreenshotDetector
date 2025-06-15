@@ -522,7 +522,7 @@
                 updateDisplay();
                 updateStats();
                 saveScreenshotsToStorage(); // Speichern
-                addLog(`🗑️ Screenshot gelöscht: ${deletedName}`);
+                addLog(`Screenshot gelöscht: ${deletedName}`);
             }
         }
 
@@ -536,7 +536,7 @@
                 updateDisplay();
                 updateStats();
                 saveScreenshotsToStorage(); // Speichern
-                addLog('🗑️ Alle Screenshots gelöscht');
+                addLog('Alle Screenshots gelöscht');
             }
         }
 
@@ -556,7 +556,7 @@
                 }, index * 100); // Kleine Verzögerung zwischen Downloads
             });
             
-            addLog(`📥 ${screenshots.length} Screenshots werden heruntergeladen...`);
+            addLog(`${screenshots.length} Screenshots werden heruntergeladen...`);
         }
 
         // Screenshots exportieren
@@ -580,7 +580,7 @@
             link.download = `screenshots_export_${new Date().toISOString().slice(0,10)}.json`;
             link.click();
             
-            addLog(`📤 ${screenshots.length} Screenshots exportiert`);
+            addLog(`${screenshots.length} Screenshots exportiert`);
         }
 
         // Screenshots importieren
@@ -615,11 +615,11 @@
                         updateDisplay();
                         updateStats();
                         saveScreenshotsToStorage();
-                        addLog(`📥 ${importCount} Screenshots importiert`);
+                        addLog(`${importCount} Screenshots importiert`);
                     }
                 } catch (error) {
                     alert('Fehler beim Importieren: ' + error.message);
-                    addLog('⚠️ Import-Fehler: ' + error.message);
+                    addLog('Import-Fehler: ' + error.message);
                 }
             };
             reader.readAsText(file);
@@ -690,9 +690,9 @@
         });
 
         // Initial log
-        addLog('✅ Screenshot Receiver bereit');
-        addLog('🔗 Upload-URL: ' + window.location.origin + window.location.pathname + 'upload');
-        addLog('💾 Automatische Speicherung aktiviert');
+        addLog('Screenshot Receiver bereit');
+        addLog('Upload-URL: ' + window.location.origin + window.location.pathname + 'upload');
+        addLog('Automatische Speicherung aktiviert');
     </script>
 </body>
 </html>
