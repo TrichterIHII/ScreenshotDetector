@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Screenshot Receiver</title>
+    <title>Screenshot Receiver - IndexedDB</title>
     <style>
         * {
             margin: 0;
@@ -285,6 +285,30 @@
             background: #6b46c1;
         }
 
+        .quota-info {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 10px;
+            font-size: 0.9em;
+        }
+
+        .quota-bar {
+            width: 100%;
+            height: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+
+        .quota-fill {
+            height: 100%;
+            background: linear-gradient(45deg, #38a169, #68d391);
+            transition: width 0.3s ease;
+        }
+
         @media (max-width: 768px) {
             .screenshots-grid {
                 grid-template-columns: 1fr;
@@ -299,11 +323,18 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>Screenshot Receiver</h1>
-            <p>Empfange und verwalte Screenshots von Java-Anwendungen</p>
+            <h1>Screenshot Receiver - IndexedDB</h1>
+            <p>Empfange und verwalte Screenshots mit erweiterten Speicher (bis zu mehreren GB)</p>
             <div class="storage-info">
-                Screenshots werden dauerhaft im Browser gespeichert
-                <br>Speicherplatz verwendet: <span id="storageUsed">0 MB</span>
+                <strong>IndexedDB Speicher:</strong> Bis zu mehreren GB verfügbar
+                <br>Verwendeter Speicher: <span id="storageUsed">0 MB</span>
+            </div>
+            <div class="quota-info" id="quotaInfo">
+                <div>Verfügbare Speicherquote: <span id="quotaAvailable">Wird ermittelt...</span></div>
+                <div>Verwendet: <span id="quotaUsed">0 MB</span></div>
+                <div class="quota-bar">
+                    <div class="quota-fill" id="quotaFill" style="width: 0%"></div>
+                </div>
             </div>
         </div>
 
@@ -351,12 +382,11 @@
         <div class="screenshots-grid" id="screenshotsGrid"></div>
 
         <div class="log" id="logArea">
-            <div>Screenshot Receiver gestartet...</div>
-            <div>Warte auf eingehende Screenshots...</div>
+            <div>Screenshot Receiver mit IndexedDB gestartet...</div>
+            <div>Initialisiere Datenbank...</div>
         </div>
     </div>
 
-    <!-- Modal für Vollbild-Ansicht -->
     <div id="imageModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal()">&times;</span>
@@ -364,65 +394,163 @@
         </div>
     </div>
 
-    <!-- Hidden file input for import -->
     <input type="file" id="importInput" accept=".json" style="display: none;">
 
     <script>
+        let db;
         let screenshots = [];
         let totalSize = 0;
-        const STORAGE_KEY = 'screenshotReceiver_screenshots';
+        const DB_NAME = 'ScreenshotReceiver';
+        const DB_VERSION = 1;
+        const STORE_NAME = 'screenshots';
 
-        // Beim Laden der Seite gespeicherte Screenshots laden
-        window.addEventListener('load', () => {
-            loadScreenshotsFromStorage();
-            updateStorageInfo();
-        });
+        // IndexedDB initialisieren
+        async function initDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                
+                request.onerror = () => {
+                    addLog('Fehler beim Öffnen der Datenbank: ' + request.error);
+                    reject(request.error);
+                };
+                
+                request.onsuccess = () => {
+                    db = request.result;
+                    addLog('IndexedDB erfolgreich initialisiert');
+                    resolve(db);
+                };
+                
+                request.onupgradeneeded = (event) => {
+                    db = event.target.result;
+                    const objectStore = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+                    objectStore.createIndex('timestamp', 'timestamp', { unique: false });
+                    addLog('Datenbank Schema erstellt');
+                };
+            });
+        }
 
-        // Upload URL anzeigen
-        document.getElementById('uploadUrl').textContent = window.location.origin + window.location.pathname + 'upload';
-
-        // Screenshots aus LocalStorage laden
-        function loadScreenshotsFromStorage() {
-            try {
-                const stored = window.localStorage.getItem(STORAGE_KEY);
-                if (stored) {
-                    screenshots = JSON.parse(stored);
-                    // Gesamtgröße berechnen
+        // Screenshots aus IndexedDB laden
+        async function loadScreenshotsFromDB() {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([STORE_NAME], 'readonly');
+                const objectStore = transaction.objectStore(STORE_NAME);
+                const request = objectStore.getAll();
+                
+                request.onsuccess = () => {
+                    screenshots = request.result.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
                     totalSize = screenshots.reduce((sum, screenshot) => sum + screenshot.size, 0);
                     updateDisplay();
                     updateStats();
-                    addLog(`${screenshots.length} gespeicherte Screenshots geladen`);
+                    addLog(`${screenshots.length} Screenshots aus IndexedDB geladen`);
+                    resolve(screenshots);
+                };
+                
+                request.onerror = () => {
+                    addLog('Fehler beim Laden der Screenshots: ' + request.error);
+                    reject(request.error);
+                };
+            });
+        }
+
+        // Screenshot in IndexedDB speichern
+        async function saveScreenshotToDB(screenshot) {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([STORE_NAME], 'readwrite');
+                const objectStore = transaction.objectStore(STORE_NAME);
+                const request = objectStore.add(screenshot);
+                
+                request.onsuccess = () => {
+                    addLog(`Screenshot gespeichert: ${screenshot.name}`);
+                    resolve();
+                };
+                
+                request.onerror = () => {
+                    addLog('Fehler beim Speichern: ' + request.error);
+                    reject(request.error);
+                };
+            });
+        }
+
+        // Screenshot aus IndexedDB löschen
+        async function deleteScreenshotFromDB(id) {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([STORE_NAME], 'readwrite');
+                const objectStore = transaction.objectStore(STORE_NAME);
+                const request = objectStore.delete(id);
+                
+                request.onsuccess = () => {
+                    resolve();
+                };
+                
+                request.onerror = () => {
+                    addLog('Fehler beim Löschen: ' + request.error);
+                    reject(request.error);
+                };
+            });
+        }
+
+        // Alle Screenshots aus IndexedDB löschen
+        async function clearAllScreenshotsFromDB() {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([STORE_NAME], 'readwrite');
+                const objectStore = transaction.objectStore(STORE_NAME);
+                const request = objectStore.clear();
+                
+                request.onsuccess = () => {
+                    addLog('Alle Screenshots aus Datenbank gelöscht');
+                    resolve();
+                };
+                
+                request.onerror = () => {
+                    addLog('Fehler beim Löschen aller Screenshots: ' + request.error);
+                    reject(request.error);
+                };
+            });
+        }
+
+        // Speicherquota ermitteln
+        async function checkStorageQuota() {
+            if ('storage' in navigator && 'estimate' in navigator.storage) {
+                try {
+                    const estimate = await navigator.storage.estimate();
+                    const quota = estimate.quota;
+                    const usage = estimate.usage;
+                    
+                    document.getElementById('quotaAvailable').textContent = formatBytes(quota);
+                    document.getElementById('quotaUsed').textContent = formatBytes(usage);
+                    
+                    const percentage = (usage / quota) * 100;
+                    document.getElementById('quotaFill').style.width = percentage + '%';
+                    
+                    addLog(`Speicherquota: ${formatBytes(usage)} / ${formatBytes(quota)} (${percentage.toFixed(1)}%)`);
+                    
+                    if (percentage > 80) {
+                        addLog('WARNUNG: Speicher ist zu über 80% belegt!');
+                    }
+                } catch (error) {
+                    addLog('Fehler beim Ermitteln der Speicherquota: ' + error.message);
                 }
-            } catch (error) {
-                addLog('Fehler beim Laden der gespeicherten Screenshots: ' + error.message);
-                screenshots = [];
-                totalSize = 0;
+            } else {
+                document.getElementById('quotaAvailable').textContent = 'Nicht verfügbar';
+                addLog('Storage API nicht verfügbar');
             }
         }
 
-        // Screenshots in LocalStorage speichern
-        function saveScreenshotsToStorage() {
+        // Initialisierung
+        window.addEventListener('load', async () => {
             try {
-                window.localStorage.setItem(STORAGE_KEY, JSON.stringify(screenshots));
-                updateStorageInfo();
-                addLog('Screenshots gespeichert');
+                await initDB();
+                await loadScreenshotsFromDB();
+                await checkStorageQuota();
+                
+                // Upload URL anzeigen
+                document.getElementById('uploadUrl').textContent = window.location.origin + window.location.pathname + 'upload';
+                
+                addLog('System bereit für Screenshots bis zu mehreren GB');
             } catch (error) {
-                addLog('Fehler beim Speichern: ' + error.message);
-                if (error.name === 'QuotaExceededError') {
-                    alert('Speicher voll! Bitte löschen Sie einige Screenshots.');
-                }
+                addLog('Initialisierungsfehler: ' + error.message);
             }
-        }
-
-        // Speicherplatz-Info aktualisieren
-        function updateStorageInfo() {
-            try {
-                const used = new Blob([window.localStorage.getItem(STORAGE_KEY) || '']).size;
-                document.getElementById('storageUsed').textContent = formatBytes(used);
-            } catch (error) {
-                document.getElementById('storageUsed').textContent = 'Unbekannt';
-            }
-        }
+        });
 
         // Drag & Drop für Upload-Bereich
         const uploadArea = document.getElementById('uploadArea');
@@ -457,26 +585,30 @@
         }
 
         // Screenshot hinzufügen
-        function addScreenshot(file, timestamp) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const screenshot = {
-                    id: Date.now() + Math.random(),
-                    data: e.target.result,
-                    timestamp: timestamp,
-                    size: file.size,
-                    name: file.name || `screenshot_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.jpg`
+        async function addScreenshot(file, timestamp) {
+            try {
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    const screenshot = {
+                        id: Date.now() + Math.random(),
+                        data: e.target.result,
+                        timestamp: timestamp,
+                        size: file.size,
+                        name: file.name || `screenshot_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.jpg`
+                    };
+                    
+                    await saveScreenshotToDB(screenshot);
+                    screenshots.unshift(screenshot);
+                    totalSize += file.size;
+                    
+                    updateDisplay();
+                    updateStats();
+                    await checkStorageQuota();
                 };
-                
-                screenshots.unshift(screenshot); // Am Anfang hinzufügen
-                totalSize += file.size;
-                
-                updateDisplay();
-                updateStats();
-                saveScreenshotsToStorage(); // Speichern
-                addLog(`Screenshot empfangen: ${screenshot.name} (${formatBytes(file.size)})`);
-            };
-            reader.readAsDataURL(file);
+                reader.readAsDataURL(file);
+            } catch (error) {
+                addLog('Fehler beim Hinzufügen des Screenshots: ' + error.message);
+            }
         }
 
         // Anzeige aktualisieren
@@ -503,6 +635,7 @@
         function updateStats() {
             document.getElementById('totalCount').textContent = screenshots.length;
             document.getElementById('totalSize').textContent = formatBytes(totalSize);
+            document.getElementById('storageUsed').textContent = formatBytes(totalSize);
             
             if (screenshots.length > 0) {
                 const lastTime = new Date(screenshots[0].timestamp).toLocaleTimeString();
@@ -513,30 +646,41 @@
         }
 
         // Screenshot löschen
-        function deleteScreenshot(id) {
-            const index = screenshots.findIndex(s => s.id == id);
-            if (index > -1) {
-                totalSize -= screenshots[index].size;
-                const deletedName = screenshots[index].name;
-                screenshots.splice(index, 1);
-                updateDisplay();
-                updateStats();
-                saveScreenshotsToStorage(); // Speichern
-                addLog(`Screenshot gelöscht: ${deletedName}`);
+        async function deleteScreenshot(id) {
+            try {
+                const index = screenshots.findIndex(s => s.id == id);
+                if (index > -1) {
+                    const deletedName = screenshots[index].name;
+                    totalSize -= screenshots[index].size;
+                    screenshots.splice(index, 1);
+                    
+                    await deleteScreenshotFromDB(id);
+                    updateDisplay();
+                    updateStats();
+                    await checkStorageQuota();
+                    addLog(`Screenshot gelöscht: ${deletedName}`);
+                }
+            } catch (error) {
+                addLog('Fehler beim Löschen: ' + error.message);
             }
         }
 
         // Alle Screenshots löschen
-        function clearAllScreenshots() {
+        async function clearAllScreenshots() {
             if (screenshots.length === 0) return;
             
             if (confirm(`Wirklich alle ${screenshots.length} Screenshots dauerhaft löschen?`)) {
-                screenshots = [];
-                totalSize = 0;
-                updateDisplay();
-                updateStats();
-                saveScreenshotsToStorage(); // Speichern
-                addLog('Alle Screenshots gelöscht');
+                try {
+                    await clearAllScreenshotsFromDB();
+                    screenshots = [];
+                    totalSize = 0;
+                    updateDisplay();
+                    updateStats();
+                    await checkStorageQuota();
+                    addLog('Alle Screenshots gelöscht');
+                } catch (error) {
+                    addLog('Fehler beim Löschen aller Screenshots: ' + error.message);
+                }
             }
         }
 
@@ -553,7 +697,7 @@
                     link.href = screenshot.data;
                     link.download = screenshot.name;
                     link.click();
-                }, index * 100); // Kleine Verzögerung zwischen Downloads
+                }, index * 100);
             });
             
             addLog(`${screenshots.length} Screenshots werden heruntergeladen...`);
@@ -589,12 +733,12 @@
         }
 
         // Import-Input Handler
-        document.getElementById('importInput').addEventListener('change', (e) => {
+        document.getElementById('importInput').addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (!file) return;
 
             const reader = new FileReader();
-            reader.onload = (e) => {
+            reader.onload = async (e) => {
                 try {
                     const importData = JSON.parse(e.target.result);
                     
@@ -604,17 +748,13 @@
 
                     const importCount = importData.screenshots.length;
                     if (confirm(`${importCount} Screenshots importieren? (Bestehende bleiben erhalten)`)) {
-                        // Neue IDs vergeben um Konflikte zu vermeiden
-                        importData.screenshots.forEach(screenshot => {
+                        for (const screenshot of importData.screenshots) {
                             screenshot.id = Date.now() + Math.random();
-                        });
+                            await saveScreenshotToDB(screenshot);
+                        }
                         
-                        screenshots = [...importData.screenshots, ...screenshots];
-                        totalSize = screenshots.reduce((sum, screenshot) => sum + screenshot.size, 0);
-                        
-                        updateDisplay();
-                        updateStats();
-                        saveScreenshotsToStorage();
+                        await loadScreenshotsFromDB();
+                        await checkStorageQuota();
                         addLog(`${importCount} Screenshots importiert`);
                     }
                 } catch (error) {
@@ -624,22 +764,19 @@
             };
             reader.readAsText(file);
             
-            // Input zurücksetzen
             e.target.value = '';
         });
 
-        // Modal öffnen
+        // Modal Funktionen
         function openModal(imageSrc) {
             document.getElementById('modalImage').src = imageSrc;
             document.getElementById('imageModal').style.display = 'block';
         }
 
-        // Modal schließen
         function closeModal() {
             document.getElementById('imageModal').style.display = 'none';
         }
 
-        // Modal bei Klick außerhalb schließen
         window.onclick = function(event) {
             const modal = document.getElementById('imageModal');
             if (event.target === modal) {
@@ -655,7 +792,6 @@
             logEntry.textContent = `[${timestamp}] ${message}`;
             logArea.insertBefore(logEntry, logArea.firstChild);
             
-            // Nur die letzten 50 Einträge behalten
             while (logArea.children.length > 50) {
                 logArea.removeChild(logArea.lastChild);
             }
@@ -665,7 +801,7 @@
         function formatBytes(bytes) {
             if (bytes === 0) return '0 B';
             const k = 1024;
-            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
@@ -689,10 +825,8 @@
             }
         });
 
-        // Initial log
-        addLog('Screenshot Receiver bereit');
-        addLog('Upload-URL: ' + window.location.origin + window.location.pathname + 'upload');
-        addLog('Automatische Speicherung aktiviert');
+        // Regelmäßige Quota-Überprüfung
+        setInterval(checkStorageQuota, 30000); // Alle 30 Sekunden
     </script>
 </body>
 </html>
