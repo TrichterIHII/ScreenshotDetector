@@ -299,10 +299,10 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📸 Screenshot Receiver</h1>
+            <h1>Screenshot Receiver</h1>
             <p>Empfange und verwalte Screenshots von Java-Anwendungen</p>
             <div class="storage-info">
-                💾 Screenshots werden dauerhaft im Browser gespeichert
+                Screenshots werden dauerhaft im Browser gespeichert
                 <br>Speicherplatz verwendet: <span id="storageUsed">0 MB</span>
             </div>
         </div>
@@ -323,7 +323,7 @@
         </div>
 
         <div class="upload-area" id="uploadArea">
-            <h3>📤 Upload Endpoint bereit</h3>
+            <h3>Upload Endpoint bereit</h3>
             <p>Java-Anwendung kann Screenshots an diese Seite senden</p>
             <p><strong>URL:</strong> <code id="uploadUrl"></code></p>
             <br>
@@ -335,24 +335,24 @@
 
         <div class="controls">
             <button class="control-btn clear-btn" onclick="clearAllScreenshots()">
-                🗑️ Alle löschen
+                Alle löschen
             </button>
             <button class="control-btn download-btn" onclick="downloadAllScreenshots()">
-                📥 Alle herunterladen
+                Alle herunterladen
             </button>
             <button class="control-btn export-btn" onclick="exportScreenshots()">
-                📤 Export
+                Export
             </button>
             <button class="control-btn import-btn" onclick="importScreenshots()">
-                📥 Import
+                Import
             </button>
         </div>
 
         <div class="screenshots-grid" id="screenshotsGrid"></div>
 
         <div class="log" id="logArea">
-            <div>🚀 Screenshot Receiver gestartet...</div>
-            <div>📡 Warte auf eingehende Screenshots...</div>
+            <div>Screenshot Receiver gestartet...</div>
+            <div>Warte auf eingehende Screenshots...</div>
         </div>
     </div>
 
@@ -391,10 +391,10 @@
                     totalSize = screenshots.reduce((sum, screenshot) => sum + screenshot.size, 0);
                     updateDisplay();
                     updateStats();
-                    addLog(`📂 ${screenshots.length} gespeicherte Screenshots geladen`);
+                    addLog(`${screenshots.length} gespeicherte Screenshots geladen`);
                 }
             } catch (error) {
-                addLog('⚠️ Fehler beim Laden der gespeicherten Screenshots: ' + error.message);
+                addLog('Fehler beim Laden der gespeicherten Screenshots: ' + error.message);
                 screenshots = [];
                 totalSize = 0;
             }
@@ -405,9 +405,9 @@
             try {
                 window.localStorage.setItem(STORAGE_KEY, JSON.stringify(screenshots));
                 updateStorageInfo();
-                addLog('💾 Screenshots gespeichert');
+                addLog('Screenshots gespeichert');
             } catch (error) {
-                addLog('⚠️ Fehler beim Speichern: ' + error.message);
+                addLog('Fehler beim Speichern: ' + error.message);
                 if (error.name === 'QuotaExceededError') {
                     alert('Speicher voll! Bitte löschen Sie einige Screenshots.');
                 }
